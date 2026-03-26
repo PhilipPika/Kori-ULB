@@ -22,7 +22,7 @@ function flux=DpareaWarGds(ewr,nsr,MASK,Bmelt,kegdsx,kegdsy, ...
                         elseif kegdsx(i,j)>0.
                             pp(8)=kegdsx(i,j)/gdsmag(i,j);
                         end
-                        if pp(par.dirpp_war(count))>0 && funcnt<=5e4
+                        if pp(par.dirpp_war(count))>0 && funcnt<=2000
                             funcnt=funcnt+1;
                             flux=DpareaWarGds(i,j,MASK,Bmelt,kegdsx,kegdsy, ...
                                 par,ctr,flux,gdsmag,funcnt);
