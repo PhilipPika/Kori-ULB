@@ -7,7 +7,6 @@ function default=InitDefault
     default.upstream=1; % upstream differences in solution of ice thickness equation
     default.ItSolv=1; %VL: new parameter
     default.BetaIter=5; % number of times that beta is updated within velocity nonlinear iteration
-    default.veltol=1e-4; % Tolerance for the iterative SSA velocity solver (1e-4)
     default.snapshot=100;
     default.Ao=1.0e-16;
     default.m=1;
@@ -29,6 +28,7 @@ function default=InitDefault
     default.gammaTplume=5.9e-4;
     default.E0=3.6e-2;
     default.M0picop=10;
+    default.meltfactor=0.3;
     default.G0=0.042;
     default.u0=1e12;
     default.Asin=1e-10;
@@ -36,6 +36,6 @@ function default=InitDefault
     default.taulim=0.15e6;
     default.damlim=0.9; % limit on total damage (% of H)
     default.OceanVisc=1.0e8;
+    default.TracerCalc = 0; % 0: off, 1: on (Advection-Diffusion Tracer Module)
+    default.WaterVelocityCalc = 0; % 0: off, 1: on (Calculate u_water, v_water)
 end
-
-

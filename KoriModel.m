@@ -186,8 +186,8 @@ slicecount=0;
 %--------------------------------------------------------------------
 
 [Asor,stdB,v,vx,vy,tmp,Db,To,So,Tb,uxssa,uyssa,deltaZ,arcocn,arcocn0, ...
-    E,wat,Pr,Evp,runoff,MeltInv,lat,acc,Smelt,rain,TF,HAF,Hinit,ZB, ...
-    flagHu,frb,kei,Ll,damage,CR,FMR,fluxmx,fluxmy,ds,db,Hw,Ht]=deal(false);
+    E,wat,Epmp,Pr,Evp,runoff,MeltInv,lat,acc,Smelt,rain,TF,HAF,Hinit,ZB, ...
+    flagHu,frb,kei,Ll,damage,CR,FMR,fluxmx,fluxmy,ds,db,C]=deal(false);
 
 %---------------------
 % Initialization
@@ -202,6 +202,7 @@ slicecount=0;
     Bmelt_mean,Ts_mean,Mb_mean,To_mean,So_mean,TF_mean,CR_mean,FMR_mean, ...
     fluxmx_mean,fluxmy_mean,Smelt_mean,runoff_mean,rain_mean,acc_mean, ...
     Neff,expflw,kappa,etaD,beta2]=InitMatrices(ctr,par,default,fc);
+
 
 %----------------------------------------------------------------------
 % Read inputdata
@@ -284,7 +285,6 @@ if ctr.Tcalc>=1
         CTSp=zeros(size(tmp));
         Ht=zeros(size(Tb));
         Hw=zeros(size(Tb));
-        Bmelt=zeros(size(Tb));
         Dfw=zeros(size(E));
         if ctr.Tinit==0
             Hw=max(0,min((Bmelt-par.Cdr)*ctr.dt*ctr.intT,par.Wmax));
@@ -329,6 +329,17 @@ if exist('LSF','var')==0
     LSF(MASK==0 & H<=par.SeaIceThickness)=-1;
 end
 
+%--------------------------------------------------
+% Initialization of chemical tracer
+%--------------------------------------------------
+
+if isfield(ctr, 'TracerCalc') && ctr.TracerCalc == 1
+    par.varlist = [par.varlist, 'C'];
+    % Initialize tracer concentration only if it hasn't been loaded from file
+    if ~exist('C','var') || islogical(C)
+        C = zeros(ctr.imax, ctr.jmax); 
+    end
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %                                                 %
@@ -493,25 +504,24 @@ for cnt=cnt0:ctr.nsteps
     if ctr.Tcalc>=1 % on d-grid
         if cntT==1
             if (ctr.Tinit==1 && cnt==1) || ctr.Tinit==2
-                [tmp,E,wat]=InitTemp3d(G,taudxy,ub,ud,par,H,Mb,zeta,ctr,Ts, ...
-                    MASK,fc.DeltaTo(cnt));
+                [tmp,E,Epmp,wat]=InitTemp3d(G,taudxy,ub,ud,par,H,Mb,zeta,ctr,Ts, ...
+                    MASK,fc.DeltaT(cnt));
             end
             if ctr.Tinit<2
                 if ctr.Enthalpy==1
-                    [E,Epmp,wat,CTSm,CTSp,Dbw,Dfw,Ht,tmp]= ...
+                    [E,Epmp,wat,CTSm,CTSp,Bmelt,Dbw,Dfw,Hw,Ht,tmp]= ...
                         Enthalpy3d(par,ctr,E,Mb,Ts,G,A,H,pxy, ...
                         ctr.dt*ctr.intT,gradsx,gradsy,gradHx,gradHy, ...
                         gradxy,taudxy,udx,udy,ub,ubx,uby,zeta,dzc, ...
-                        dzm,dzp,fc.DeltaT,fc.DeltaTo,MASK,Bmelt,CTSm,CTSp, ...
+                        dzm,dzp,fc.DeltaT,MASK,Bmelt,Epmp,CTSm,CTSp, ...
                         Hw,Ht,Dbw,Dfw,etaD,beta2,cnt);
                 else
                     [tmp,ctr]=Temperature3d(tmp,Mb,Ts,pxy,par, ...
                         ctr,ctr.dt*ctr.intT,gradsx,gradsy,gradHx,gradHy, ...
                         udx,udy,ub,ubx,uby,zeta,gradxy,H,dzc,dzm,dzp, ...
-                        G,taudxy,A,fc.DeltaT,fc.DeltaTo,MASK,Bmelt,etaD,beta2,cnt);
+                        G,taudxy,A,fc.DeltaT,MASK,Bmelt,etaD,beta2,cnt);
+                    Bmelt=BasalMelting(ctr,par,G,taudxy,ub,H,tmp,dzm,MASK);
                 end
-                [Bmelt,Hw]=BasalMelting(ctr,par,G,taudxy,ub,H,tmp, ...
-                    dzm,MASK,Hw,Ht,E,Epmp,wat,Dbw);
             end
         end
         Tb=tmp(:,:,ctr.kmax)-par.T0;
@@ -527,15 +537,51 @@ for cnt=cnt0:ctr.nsteps
 %-------------------------------------
     if not(or(ctr.subwaterflow==0, ctr.subwaterflow==2))
         if cntT==1
-            [flw,Wd]=SubWaterFlux(ctr,par,H,HB,MASK,max(1e-8,Bmelt+Dbw));
+            % --- 1. RUN HYDROLOGY MODEL ---
+            [flw,Wd,kegdsx,kegdsy]=SubWaterFlux(ctr,par,H,HB,MASK,max(1e-8,Bmelt+Dbw));
             Wd0=Wd;
+
+            % --- 2. CALCULATE WATER VELOCITY ---
+            if (isfield(ctr, 'WaterVelocityCalc') && ctr.WaterVelocityCalc == 1) ...
+                    || (isfield(ctr, 'TracerCalc') && ctr.TracerCalc == 1)
+                % Get effective water depth
+                Wd_eff = max(Wd, par.Wdmin);
+                
+                % Get hydraulic gradient magnitude
+                grad_mag = sqrt(kegdsx.^2 + kegdsy.^2);
+                grad_mag_eff = max(grad_mag, 1e-9);
+                
+                % Calculate flux components (Flow is DOWN gradient)
+                flw_x = -flw .* (kegdsx ./ grad_mag_eff);
+                flw_y = -flw .* (kegdsy ./ grad_mag_eff);
+                
+                % Calculate velocity components
+                u_water = flw_x ./ Wd_eff;
+                v_water = flw_y ./ Wd_eff;
+                
+                % Ensure no velocity outside the mask
+                u_water(MASK==0) = 0;
+                v_water(MASK==0) = 0;
+            end
+
+            % --- 3. RUN TRACER MODULE ---
+            if isfield(ctr, 'TracerCalc') && ctr.TracerCalc == 1
+                
+                % 3a. Call the tracer module
+                [C]=AdvDiffTracer(ctr,par,C,Wd,u_water,v_water,MASK);
+                
+                % 3b. Apply ocean boundary condition
+                C(MASK==0) = par.Tracer_C_Ocean;
+            end
+
         else
+            % --- 3. EXTRAPOLATE WATER DEPTH (on other steps) ---
             if ctr.inverse==0
                 Wd=ExtrapolateWaterFlux(MASK,oldMASK,Wd,Wd0,ctr,par);
             end
         end
     end
-
+    
 %----------------------------------------------------------
 % MASK for ice shelf/SSA (zero if SSA is not calculated)
 %----------------------------------------------------------
@@ -608,7 +654,7 @@ for cnt=cnt0:ctr.nsteps
 
 	if ctr.glMASKexist==1 && ctr.inverse==0
 		% Update ocean forcing based on external forcing data
-		[Tof,Sof,TFf,cnt_ocn,snp_ocn]=OCEANupdate(fc,time,cnt, ...
+		[Tof,Sof,TFf,cnt_ocn,snp_ocn]=OCEANupdate(fc,ctr,time,cnt, ...
             So0,To0,Tof,Sof,TFf,cnt_ocn,snp_ocn);
 
 		% Extrapolate To and Tf to the depth of interest according 
@@ -929,6 +975,9 @@ end
 if ctr.inverse>0
     Hinit=H;
     save(outfile,'Hinit','-append');
+end
+if isfield(ctr, 'TracerCalc') && ctr.TracerCalc == 1
+par.varlist = [par.varlist, 'C'];
 end
 
 Ts=Tsend;

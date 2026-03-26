@@ -90,6 +90,7 @@ par.n            = 3;                        % flow law exponent
 par.visciter     = 50;                       % Maximum number of iterations on the nonlinear part of the SSA equation (50)
 par.visctol      = 5e-1;                     % Tolerance for calculation of the nonlinear part of the SSA equation (0.5)
 par.veliter      = 50;                       % Maximum number of iterations for the iterative SSA velocity solver (50)
+par.veltol       = 1e-4;                     % Tolerance for the iterative SSA velocity solver (1e-4)
 if basin==1
     par.veltol   = par.veltol/10;
 end
@@ -169,6 +170,15 @@ par.bedrelax  = 3000.;   % relaxation time astenosphere
 par.nuB       = 0.25;    % Poisson ratio in flexural rigidity
 
 %-----------------------------------
+% Chemical Tracer
+%-----------------------------------
+
+par.Tracer_K      = 31.5;        % Diffusion Coefficient (m^2/a) [e.g., 1e-9 m^2/s * secperyear]
+par.Tracer_Lambda = 0;        % First-order reaction rate constant (1/a)
+par.Tracer_C0     = 1;         % Initial concentration (e.g., non-dimensional or mol/m^3)
+par.Tracer_C_Ocean= 0.0;         % Ocean/Ice Shelf boundary concentration
+
+%-----------------------------------
 % Local sea level (fingerprints)
 %-----------------------------------
 
@@ -225,7 +235,7 @@ par.Q2D     = 139e3;
 % PDD model parameters
 %-----------------------------------
 
-par.PDDth=0;                 % PDD threshold temperature (0°C)
+par.PDDth=0;                 % PDD threshold temperature (0ï¿½C)
 par.Train     = 2;
 par.Tsnow     = 0;
 par.snowfac   = 3/par.rho;   % PDD factor for snow melt
@@ -246,5 +256,3 @@ par.As0  = 1e-20;   % sliding coefficient outside basin
 par.A0   = 1e-20;   % Ice fluidity outside basin
 
 end
-
-
