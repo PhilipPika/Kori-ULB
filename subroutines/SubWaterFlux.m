@@ -1,4 +1,4 @@
-function [flw,Wd]=SubWaterFlux(ctr,par,H,HB,MASK,Bmelt)
+function [flw,Wd,kegdsx,kegdsy]=SubWaterFlux(ctr,par,H,HB,MASK,Bmelt)
 
 % Kori-ULB
 % Steady-state subglacial water flow model
